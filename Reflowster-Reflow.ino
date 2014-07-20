@@ -1,11 +1,12 @@
-#include <Adafruit_NeoPixel.h>
-#include <SPI.h>
 #include <Encoder.h>
-#include "Adafruit_MAX31855.h"
+#include <SPI.h>
+#include <Adafruit_MAX31855.h>
+#include <Adafruit_NeoPixel.h>
+#include <ReflowDisplay.h>
+#include "Reflowster.h"
 
 #include <string.h>
 #include <EEPROM.h>
-#include "Reflowster.h"
 
 const int REVISION=0;
 
