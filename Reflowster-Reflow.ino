@@ -59,6 +59,8 @@ const int TEMP_MODE_C = 0;
 const int TEMP_MODE_F = 1;
 const int DEFAULT_TEMP_MODE = TEMP_MODE_C;
 
+const int tones[] = {28,29,31,33,35,37,39,41,44,46,49,52,55,58,62,65,69,73,78,82,87,92,98,104,110,117,123,131,139,147,156,165,175,185,196,208,220,233,247,262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976,2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951,4186};
+
 void setup() {
   Serial.begin(9600);
 
@@ -90,6 +92,11 @@ void setup() {
   reflowster.displayTest();
   reflowster.getDisplay()->display(REVISION);
   delay(500);
+//  noInterrupts();
+//  while(1) {
+//    activeMode = MODE_MENU;
+//    processCommands();
+//  }
   loadProfiles();
 }
 
@@ -178,6 +185,24 @@ void processCommands() {
       } else if (command.equalsIgnoreCase("start")) {
         recognized = true;
         activeCommand = CMD_REFLOW_START;
+//      } else if (command.startsWith("tone ")) {
+//        recognized = true;
+//        arguments.trim();
+//        arguments.toCharArray(buffer,arguments.length()+1);
+//        char * tok = strtok(buffer, " ,");
+//        i = 0;
+//        while(tok != NULL) {
+//          int key = atoi(tok);
+//          tok = strtok(NULL, " ,");
+//          int len = atoi(tok);
+//          tok = strtok(NULL, " ,");
+//          if (key != 0) reflowster.beep(tones[key],len);
+//          delay(len);
+//          Serial.print("tone: ");
+//          Serial.print(key);
+//          Serial.print(" ");
+//          Serial.println(len);
+//        }
       }
     } else if (activeMode == MODE_REFLOW) {
       if (command.equalsIgnoreCase("stop")) {
@@ -227,6 +252,35 @@ void processCommands() {
   }
 }
 
+void tone_error() {
+  reflowster.beep(tones[28],200);
+  delay(200);
+  reflowster.beep(tones[27],200);
+  delay(200);
+}
+
+void tone_notice() {
+  reflowster.beep(tones[52],200);
+  delay(200);
+  delay(100);
+  reflowster.beep(tones[52],200);
+//  delay(200);
+}
+
+void tone_success() {
+  reflowster.beep(tones[42],100);
+  delay(100);
+  reflowster.beep(tones[45],100);
+  delay(100);
+  reflowster.beep(tones[50],100);
+//  delay(100);
+}
+
+void tone_blip() {
+  reflowster.beep(tones[32],20);
+//  delay(100);  
+}
+
 int displayMenu(char * options[], int len, int defaultChoice) {
   activeMode = MODE_MENU;
   int menuIndex = -1;
@@ -245,11 +299,11 @@ int displayMenu(char * options[], int len, int defaultChoice) {
     }
     
     int newIndex = reflowster.getKnobPosition();
-    Serial.println();
-    Serial.print("oldIndex: ");
-    Serial.println(menuIndex);
-    Serial.print("newIndex: ");
-    Serial.println(newIndex);
+//    Serial.println();
+//    Serial.print("oldIndex: ");
+//    Serial.println(menuIndex);
+//    Serial.print("newIndex: ");
+//    Serial.println(newIndex);
     
     if (newIndex >= len) {
       newIndex = len - 1;
@@ -266,7 +320,7 @@ int displayMenu(char * options[], int len, int defaultChoice) {
     }
     
     if (newIndex != menuIndex) {
-      reflowster.beep(400,20);
+      tone_blip();
       menuIndex = newIndex;
       reflowster.getDisplay()->displayMarquee(options[menuIndex]);
     }
@@ -457,8 +511,10 @@ void doReflow() {
   activeMode = MODE_REFLOW;
   if (reflowImpl(soakTemp,soakTime,peakTemp) == 0) {  
     reflowster.getDisplay()->displayMarquee("done");
+    tone_success();
   } else {
-    reflowster.getDisplay()->displayMarquee("cancelled");    
+    reflowster.getDisplay()->displayMarquee("cancelled");
+    tone_error();
   }
   while(!reflowster.getDisplay()->marqueeComplete());
 }
