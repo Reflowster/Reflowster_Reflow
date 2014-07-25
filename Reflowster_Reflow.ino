@@ -62,6 +62,7 @@ const int DEFAULT_TEMP_MODE = TEMP_MODE_C;
 const int tones[] = {28,29,31,33,35,37,39,41,44,46,49,52,55,58,62,65,69,73,78,82,87,92,98,104,110,117,123,131,139,147,156,165,175,185,196,208,220,233,247,262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976,2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951,4186};
 
 void setup() {
+  // delay(100);
   Serial.begin(9600);
 
   noInterrupts();
@@ -69,11 +70,11 @@ void setup() {
   TCCR1B = 0;
 
   TCNT1 = 65500;            // preload timer 65536-16MHz/256/2Hz
-  TCCR1B |= (1 << CS12);    // 256 prescaler 
+  TCCR1B |= (1 << CS10)|(1 << CS11);    // 64 prescaler 
   TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
-  interrupts();
   
   reflowster.init();
+  interrupts();
   
   //We run a self test the first time the unit is powered on.. when it passes, the self test is never run again
   if (readConfig(CONFIG_SELF_TEST) != 0) {
@@ -87,6 +88,8 @@ void setup() {
       
       if (reflowster.getBackButton()) break;
     }
+
+	
   }
 
   reflowster.displayTest();
@@ -102,7 +105,7 @@ void setup() {
 
 unsigned long lastService = millis();
 ISR(TIMER1_OVF_vect) {
-  TCNT1 = 65500;
+  TCNT1 = 65518;
   
   if (millis() - lastService > 1) {
     reflowster.tick();
@@ -354,13 +357,13 @@ int chooseNum(int low, int high, int defaultVal) {
 }
 
 void loadProfiles() {
-  leaded.soakTemp = 100;
+  leaded.soakTemp = 130;
   leaded.soakTime = 90;
-  leaded.peakTemp = 190;
+  leaded.peakTemp = 225;
   
-  unleaded.soakTemp = 100;
+  unleaded.soakTemp = 140;
   unleaded.soakTime = 90;
-  unleaded.peakTemp = 190;
+  unleaded.peakTemp = 235;
 
   custom.soakTemp = leaded.soakTemp;
   custom.soakTime = leaded.soakTime;
