@@ -62,7 +62,7 @@ const int DEFAULT_TEMP_MODE = TEMP_MODE_C;
 const int tones[] = {28,29,31,33,35,37,39,41,44,46,49,52,55,58,62,65,69,73,78,82,87,92,98,104,110,117,123,131,139,147,156,165,175,185,196,208,220,233,247,262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976,2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951,4186};
 
 void setup() {
-  // delay(100);
+  delay(100);
   Serial.begin(9600);
 
   noInterrupts();
@@ -221,17 +221,12 @@ void processCommands() {
       } else if (activeMode == MODE_REFLOW) {
         Serial.println("Status: reflow in progress");        
       }
-      
       Serial.print("Current thermocouple reading (C): ");
       Serial.println(reflowster.readCelsius());
       
       Serial.println();
       
-      if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
-        Serial.println("Mode: Fahrenheit");
-      } else {
-        Serial.println("Mode: Celsius");        
-      }
+
       struct profile * active = &leaded;
       if (activeProfile == 1) active = &unleaded;
       if (activeProfile == 2) active = &custom;
@@ -239,13 +234,13 @@ void processCommands() {
       if (active == &leaded) Serial.println("Configuration: leaded");
       if (active == &unleaded) Serial.println("Configuration: unleaded");
       if (active == &custom) Serial.println("Configuration: custom");
-      Serial.print("Soak Temperature (C): ");
+      Serial.print("Soak Temperature: ");
       Serial.println(active->soakTemp);
       
-      Serial.print("Soak Time (s): ");
+      Serial.print("Soak Time: ");
       Serial.println(active->soakTime);
       
-      Serial.print("Peak Temperature (C): ");
+      Serial.print("Peak Temperature: ");
       Serial.println(active->peakTemp);
     } else if (command.equalsIgnoreCase("help")) {
       Serial.println("Reflowster accepts the following commands in normal mode:");
@@ -518,11 +513,9 @@ void doReflow() {
 
   activeMode = MODE_REFLOW;
   if (reflowImpl(soakTemp,soakTime,peakTemp) == 0) {  
-    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
   } else {
-    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("cancelled");
     tone_error();
   }
@@ -531,38 +524,27 @@ void doReflow() {
 
 char * profileMenuItems[] = {"+pb leaded","-pb unleaded","custom"};
 boolean setProfile() {
-    setActiveProfile(2);
-    editCustomProfile();
-//  while(1) {
-//    int choice = displayMenu(profileMenuItems,3,choice);
-//    switch(choice) {
-//      case -1: return false;
-//      case 0:
-//        setActiveProfile(choice);
-//        return true;
-//      break;
-//  
-//      case 1:
-//        setActiveProfile(choice);
-//        return true;
-//      break;
-//  
-//      case 2:
-//        if (editCustomProfile()) {
-//          setActiveProfile(choice);
-//          return true;
-//        }
-//      break;
-//    }
-//  }
-}
-
-int chooseTemp(byte storedTemp) {
-  boolean fahrenheitMode = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F;
-  if (fahrenheitMode) {
-    return ftoc(chooseNum(0,ctof(255),ctof(storedTemp)));
-  } else {
-    return chooseNum(0,255,storedTemp);
+  while(1) {
+    int choice = displayMenu(profileMenuItems,3,choice);
+    switch(choice) {
+      case -1: return false;
+      case 0:
+        setActiveProfile(choice);
+        return true;
+      break;
+  
+      case 1:
+        setActiveProfile(choice);
+        return true;
+      break;
+  
+      case 2:
+        if (editCustomProfile()) {
+          setActiveProfile(choice);
+          return true;
+        }
+      break;
+    }
   }
 }
 
@@ -570,7 +552,7 @@ char * editProfileMenuItems[] = {"st-soak temp","sd-soak duration","pt-peak temp
 boolean editCustomProfile() {
   int choice = 0;
   int val;
-  byte stored;
+  byte celsius;
   while(1) {
     choice = displayMenu(editProfileMenuItems,4,choice);
     switch(choice) {
@@ -578,18 +560,10 @@ boolean editCustomProfile() {
       case 0:
       case 1:
       case 2:
-        stored = *(((byte*)&custom)+choice);
-        Serial.print("stored val: ");
-        Serial.println(stored);
-        if (choice == 0 || choice == 2) { //temp choices
-          val = chooseTemp(stored);
-        } else {
-          val = chooseNum(0,255,stored);
-        }
-        Serial.print("new stored: ");
-        Serial.println(val);
-
-
+        celsius = *(((byte*)&custom)+choice);
+        val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? celsius : ctof(celsius);
+        val = chooseNum(0,readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? 255 : ctof(255),val);
+        val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? val : ftoc(val);
         *(((byte*)&custom)+choice) = val;
 
         saveProfile(1,&custom);
@@ -686,6 +660,8 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   int REPORT_INTERVAL = 200;
   
   reflowster.relayOn();
+  byte pulseColors = 0;
+  int pulse = 0;
   while(1) {
     reflowster.pulseTick();
     delay(50);
