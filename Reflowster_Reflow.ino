@@ -36,8 +36,11 @@ struct profile {
 profile profile_min(0,0,0);
 profile profile_max(250,250,250);
 
-profile leaded, unleaded, custom;
+profile active;
 byte activeProfile;
+
+char * profileNames[] = {"+pb leaded","-pb unleaded","custom"};
+const int PROFILE_COUNT = 3;
 
 int activeCommand = 0;
 // This represents the currently active command. When a command is received, this is triggered and the busy loops handle
@@ -82,14 +85,13 @@ void setup() {
     reflowster.getDisplay()->display("pas");
     while(1) {
       if (reflowster.getButton()) {
+        factoryReset();
         writeConfig(CONFIG_SELF_TEST,0);
         break;
       }
       
       if (reflowster.getBackButton()) break;
     }
-
-	
   }
 
   reflowster.displayTest();
@@ -100,7 +102,17 @@ void setup() {
 //    activeMode = MODE_MENU;
 //    processCommands();
 //  }
-  loadProfiles();
+  initProfile();
+}
+
+void factoryReset() {
+  writeConfig(CONFIG_SELF_TEST,255);
+  active = profile(130,90,225); //leaded
+  saveProfile(0);
+  active = profile(140,90,235); //unleaded
+  saveProfile(1);
+  saveProfile(2);
+  ewrite(0,0); //default active profile
 }
 
 unsigned long lastService = millis();
@@ -151,6 +163,17 @@ void processCommands() {
           recognized = true;
           reflowster.relayToggle();
         }
+      } else if (command.startsWith("set ")) {
+        //TODO dedup this code by taking advantage of the indexing in a soldering profile struct
+        recognized = true;
+        int val = arguments.toInt();
+        if (val < 0 || val > PROFILE_COUNT-1) {
+          Serial.println("Profile out of range!");
+        } else {
+          loadProfile(val);
+          Serial.print("Set active profile: ");
+          Serial.println(profileNames[activeProfile]);
+        }
       } else if (command.startsWith("setst ")) {
         //TODO dedup this code by taking advantage of the indexing in a soldering profile struct
         recognized = true;
@@ -158,10 +181,10 @@ void processCommands() {
         if (val < profile_min.soakTemp || val > profile_max.soakTemp) {
           Serial.println("Temperature out of range!");
         } else {
-          custom.soakTemp = (byte)val;
-          saveProfile(1, &custom);
+          active.soakTemp = (byte)val;
+          saveProfile(activeProfile);
           Serial.print("Set soak temperature: ");
-          Serial.println(custom.soakTemp);
+          Serial.println(active.soakTemp);
         }
       } else if (command.startsWith("setsd ")) {
         recognized = true;
@@ -169,10 +192,10 @@ void processCommands() {
         if (val < profile_min.soakTime || val > profile_max.soakTime) {
           Serial.println("Time out of range!");
         } else {
-          custom.soakTime = (byte)val;
-          saveProfile(1, &custom);
+          active.soakTime = (byte)val;
+          saveProfile(activeProfile);
           Serial.print("Set soak time: ");
-          Serial.println(custom.soakTime);
+          Serial.println(active.soakTime);
         }
       } else if (command.startsWith("setpt ")) {
         recognized = true;
@@ -180,10 +203,10 @@ void processCommands() {
         if (val < profile_min.peakTemp || val > profile_max.peakTemp) {
           Serial.println("Temperature out of range!");
         } else {
-          custom.peakTemp = (byte)val;
-          saveProfile(1, &custom);
+          active.peakTemp = (byte)val;
+          saveProfile(activeProfile);
           Serial.print("Set peak temp: ");
-          Serial.println(custom.peakTemp);
+          Serial.println(active.peakTemp);
         }
       } else if (command.equalsIgnoreCase("start")) {
         recognized = true;
@@ -227,21 +250,16 @@ void processCommands() {
       Serial.println();
       
 
-      struct profile * active = &leaded;
-      if (activeProfile == 1) active = &unleaded;
-      if (activeProfile == 2) active = &custom;
-
-      if (active == &leaded) Serial.println("Configuration: leaded");
-      if (active == &unleaded) Serial.println("Configuration: unleaded");
-      if (active == &custom) Serial.println("Configuration: custom");
+      Serial.print("Configuration: ");
+      Serial.println(profileNames[activeProfile]);
       Serial.print("Soak Temperature: ");
-      Serial.println(active->soakTemp);
+      Serial.println(active.soakTemp);
       
       Serial.print("Soak Time: ");
-      Serial.println(active->soakTime);
+      Serial.println(active.soakTime);
       
       Serial.print("Peak Temperature: ");
-      Serial.println(active->peakTemp);
+      Serial.println(active.peakTemp);
     } else if (command.equalsIgnoreCase("help")) {
       Serial.println("Reflowster accepts the following commands in normal mode:");
       Serial.println("relay on|off|toggle, setst deg_c, setsd time_s, setpt deg_c, start, status, help");
@@ -356,38 +374,27 @@ int chooseNum(int low, int high, int defaultVal) {
   }
 }
 
-void loadProfiles() {
-  leaded.soakTemp = 130;
-  leaded.soakTime = 90;
-  leaded.peakTemp = 225;
-  
-  unleaded.soakTemp = 140;
-  unleaded.soakTime = 90;
-  unleaded.peakTemp = 235;
-
-  custom.soakTemp = leaded.soakTemp;
-  custom.soakTime = leaded.soakTime;
-  custom.peakTemp = custom.peakTemp;
-  
+void initProfile() {
   activeProfile = EEPROM.read(0); //read the selected profile
-  if (activeProfile > 2) activeProfile = 0;
+  if (activeProfile > PROFILE_COUNT-1) activeProfile = 0;
 
-  loadProfile(1,&custom); //use the leaded profile as the default
+  loadProfile(activeProfile); //use the leaded profile as the default
 }
 
-void loadProfile(byte loc, struct profile * target) {
+void loadProfile(byte profileNumber) {
+  activeProfile = profileNumber;
+  if (EEPROM.read(0) != activeProfile) ewrite(0,activeProfile);
+  struct profile * target = &active;
+  int loc = 1+profileNumber*3;
   for (byte i=0; i<3; i++) {
     byte val = EEPROM.read(loc+i);
     if (val != 255) *(((byte*)target)+i) = val; //pointer-fu to populate the profile struct
   }
 }
 
-void setActiveProfile(byte p) {
-  activeProfile = p;
-  if (EEPROM.read(0) != activeProfile) ewrite(0,activeProfile);
-}
-
-void saveProfile(byte loc, struct profile * target) {
+void saveProfile(byte profileNumber) {
+  int loc = 1+profileNumber*3;
+  struct profile * target = &active;
   for (byte i=0; i<3; i++) {
     byte val = EEPROM.read(loc+i);
     if (val != *(((byte*)target)+i)) ewrite(loc+i,*(((byte*)target)+i)); //we only write to eeprom if the value is changed
@@ -416,8 +423,8 @@ void loop() {
   mainMenu();
 }
 
-char * mainMenuItems[] = {"go","set profile","monitor","config"};
-const int MAIN_MENU_SIZE = 4;
+char * mainMenuItems[] = {"go","edit","open","monitor","config"};
+const int MAIN_MENU_SIZE = 5;
 void mainMenu() {
   byte lastChoice = 0;
   while(1) {
@@ -431,12 +438,16 @@ void mainMenu() {
       case 0: doReflow(); break;
 
       case 1: 
-        if (setProfile()) lastChoice = 0;
+        editProfile();
       break;
 
-      case 2: doMonitor(); break;
+      case 2: 
+        if (openProfile()) lastChoice = 0;
+      break;
+
+      case 3: doMonitor(); break;
       
-      case 3: configMenu(); break;
+      case 4: configMenu(); break;
     }
   }
 }
@@ -495,21 +506,16 @@ void dataCollectionMode() {
 }
 
 void doReflow() {
-//  dataCollectionMode();
-//  return;
   if (isnan(reflowster.readCelsius())) {
     reflowster.getDisplay()->displayMarquee("err no temp");
     Serial.println("Error: Thermocouple could not be read, check connection!");
     while(!reflowster.getDisplay()->marqueeComplete());
     return;
   }
-  struct profile * active = &leaded;
-  if (activeProfile == 1) active = &unleaded;
-  if (activeProfile == 2) active = &custom;
 
-  byte soakTemp = active->soakTemp;
-  byte soakTime = active->soakTime;
-  byte peakTemp = active->peakTemp;
+  byte soakTemp = active.soakTemp;
+  byte soakTime = active.soakTime;
+  byte peakTemp = active.peakTemp;
 
   activeMode = MODE_REFLOW;
   if (reflowImpl(soakTemp,soakTime,peakTemp) == 0) {  
@@ -522,55 +528,36 @@ void doReflow() {
   while(!reflowster.getDisplay()->marqueeComplete());
 }
 
-char * profileMenuItems[] = {"+pb leaded","-pb unleaded","custom"};
-boolean setProfile() {
+boolean openProfile() {
   while(1) {
-    int choice = displayMenu(profileMenuItems,3,choice);
-    switch(choice) {
-      case -1: return false;
-      case 0:
-        setActiveProfile(choice);
-        return true;
-      break;
-  
-      case 1:
-        setActiveProfile(choice);
-        return true;
-      break;
-  
-      case 2:
-        if (editCustomProfile()) {
-          setActiveProfile(choice);
-          return true;
-        }
-      break;
-    }
+    int choice = displayMenu(profileNames,PROFILE_COUNT,choice);
+    if (choice == -1) return false;
+    loadProfile(choice);
+    return true;
   }
 }
 
-char * editProfileMenuItems[] = {"st-soak temp","sd-soak duration","pt-peak temp","set"};
-boolean editCustomProfile() {
+char * editProfileMenuItems[] = {"st-soak temp","sd-soak duration","pt-peak temp"};
+const int EDIT_PROFILE_ITEMS = 3;
+boolean editProfile() {
   int choice = 0;
   int val;
   byte celsius;
   while(1) {
-    choice = displayMenu(editProfileMenuItems,4,choice);
+    choice = displayMenu(editProfileMenuItems,EDIT_PROFILE_ITEMS,choice);
     switch(choice) {
-      case -1: return false;
+      case -1: return true;
       case 0:
       case 1:
       case 2:
-        celsius = *(((byte*)&custom)+choice);
+        celsius = *(((byte*)&active)+choice);
         val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? celsius : ctof(celsius);
         val = chooseNum(0,readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? 255 : ctof(255),val);
         val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? val : ftoc(val);
-        *(((byte*)&custom)+choice) = val;
+        *(((byte*)&active)+choice) = val;
 
-        saveProfile(1,&custom);
+        saveProfile(activeProfile);
       break;
-
-      case 3:
-        return true;
     }
   }
 }
@@ -600,8 +587,8 @@ void doMonitor() {
   } 
 }
 
-char * configMenuItems[] = {"temp mode"};
-const int CONFIG_MENU_ITEMS = 1;
+char * configMenuItems[] = {"temp mode","factory reset"};
+const int CONFIG_MENU_ITEMS = 2;
 
 char * tempModeMenu[] = {"Cel","Fah"};
 const int TEMP_MODE_ITEMS = 2;
@@ -611,13 +598,18 @@ void configMenu() {
     choice = displayMenu(configMenuItems,CONFIG_MENU_ITEMS,choice);
     switch(choice) {
       case -1: return;
-      case 0:
+      case 0: {
         int tempChoice = readConfig(CONFIG_TEMP_MODE);
         if (tempChoice == 255) tempChoice = DEFAULT_TEMP_MODE;
         tempChoice = displayMenu(tempModeMenu,TEMP_MODE_ITEMS,tempChoice);
         if (tempChoice != -1 && tempChoice != readConfig(CONFIG_TEMP_MODE)) {
           writeConfig(CONFIG_TEMP_MODE,tempChoice);
         }
+      }
+      break;
+
+      case 1:
+        factoryReset();
       break;
     }
   }  
