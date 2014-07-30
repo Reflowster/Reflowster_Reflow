@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=0;
+const int REVISION=1;
 
 /*
 go
