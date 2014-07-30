@@ -244,10 +244,20 @@ void processCommands() {
       } else if (activeMode == MODE_REFLOW) {
         Serial.println("Status: reflow in progress");        
       }
-      Serial.print("Current thermocouple reading (C): ");
-      Serial.println(reflowster.readCelsius());
-      
-      Serial.println();
+			Serial.print("Firmware version: ");
+			Serial.println(REVISION);
+			double tempC = reflowster.readCelsius();
+      Serial.print("Current thermocouple reading: ");
+      Serial.print(tempC);
+			Serial.print("C ");
+			Serial.print(ctof(tempC));
+			Serial.println("F");
+			tempC = reflowster.readInternalC();
+      Serial.print("Internal junction temperature: ");
+      Serial.print(tempC);
+			Serial.print("C ");
+			Serial.print(ctof(tempC));
+			Serial.println("F");
       
 
       if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
