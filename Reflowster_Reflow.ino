@@ -250,15 +250,20 @@ void processCommands() {
       Serial.println();
       
 
+      if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
+        Serial.println("Mode: Fahrenheit");
+      } else {
+        Serial.println("Mode: Celsius");        
+      }
       Serial.print("Configuration: ");
       Serial.println(profileNames[activeProfile]);
-      Serial.print("Soak Temperature: ");
+      Serial.print("Soak Temperature (C): ");
       Serial.println(active.soakTemp);
       
-      Serial.print("Soak Time: ");
+      Serial.print("Soak Time (s): ");
       Serial.println(active.soakTime);
       
-      Serial.print("Peak Temperature: ");
+      Serial.print("Peak Temperature (C): ");
       Serial.println(active.peakTemp);
     } else if (command.equalsIgnoreCase("help")) {
       Serial.println("Reflowster accepts the following commands in normal mode:");
@@ -519,9 +524,11 @@ void doReflow() {
 
   activeMode = MODE_REFLOW;
   if (reflowImpl(soakTemp,soakTime,peakTemp) == 0) {  
+    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
   } else {
+    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("cancelled");
     tone_error();
   }
@@ -537,12 +544,21 @@ boolean openProfile() {
   }
 }
 
+int chooseTemp(byte storedTemp) {
+  boolean fahrenheitMode = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F;
+  if (fahrenheitMode) {
+    return ftoc(chooseNum(0,ctof(255),ctof(storedTemp)));
+  } else {
+    return chooseNum(0,255,storedTemp);
+  }
+}
+
 char * editProfileMenuItems[] = {"st-soak temp","sd-soak duration","pt-peak temp"};
 const int EDIT_PROFILE_ITEMS = 3;
 boolean editProfile() {
   int choice = 0;
   int val;
-  byte celsius;
+  byte stored;
   while(1) {
     choice = displayMenu(editProfileMenuItems,EDIT_PROFILE_ITEMS,choice);
     switch(choice) {
@@ -550,10 +566,16 @@ boolean editProfile() {
       case 0:
       case 1:
       case 2:
-        celsius = *(((byte*)&active)+choice);
-        val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? celsius : ctof(celsius);
-        val = chooseNum(0,readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? 255 : ctof(255),val);
-        val = readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_C ? val : ftoc(val);
+        stored = *(((byte*)&active)+choice);
+        //Serial.print("stored val: ");
+        //Serial.println(stored);
+        if (choice == 0 || choice == 2) { //temp choices
+          val = chooseTemp(stored);
+        } else {
+          val = chooseNum(0,255,stored);
+        }
+        //Serial.print("new stored: ");
+        //Serial.println(val);
         *(((byte*)&active)+choice) = val;
 
         saveProfile(activeProfile);
