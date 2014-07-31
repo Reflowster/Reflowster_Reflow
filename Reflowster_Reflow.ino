@@ -95,7 +95,7 @@ void setup() {
   }
 
   reflowster.displayTest();
-  reflowster.getDisplay()->display(REVISION);
+	reflowster.getDisplay()->display(REVISION);
   delay(500);
 //  noInterrupts();
 //  while(1) {
@@ -117,12 +117,13 @@ void factoryReset() {
 
 unsigned long lastService = millis();
 ISR(TIMER1_OVF_vect) {
-  TCNT1 = 65518;
-  
-  if (millis() - lastService > 1) {
+  //TCNT1 = 65518;
+  TCNT1 = 65200;
+	
+  //if (millis() - lastService > 1) {
     reflowster.tick(); //this updates the display
     lastService = millis();
-  }
+  //}
   processCommands();
 }
 
@@ -317,7 +318,11 @@ void tone_success() {
   reflowster.beep(tones[45],100);
   delay(100);
   reflowster.beep(tones[50],100);
-//  delay(100);
+  delay(100);
+  reflowster.beep(tones[76],60);
+	delay(100);
+  reflowster.beep(tones[76],60);
+	//  delay(100);
 }
 
 void tone_blip() {
@@ -775,6 +780,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
           phase = PHASE_COOL;
           phaseStartTime = millis();
           reflowster.relayOff();
+					
         }
         break;
       }
