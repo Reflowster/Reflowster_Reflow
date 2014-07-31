@@ -251,7 +251,7 @@ void processCommands() {
 			Serial.print("Firmware version: ");
 			Serial.println(REVISION);
 			double tempC = reflowster.readCelsius();
-      Serial.print("Current thermocouple reading: ");
+	  Serial.print("Current thermocouple reading: ");
       Serial.print(tempC);
 			Serial.print("C ");
 			Serial.print(ctof(tempC));
@@ -335,7 +335,7 @@ int displayMenu(char * options[], int len, int defaultChoice) {
   int menuIndex = -1;
   reflowster.setKnobPosition(defaultChoice);
   while(1) {
-    reflowster.pulseTick();
+    //reflowster.pulseTick();
     
     if (activeCommand != 0) return -1;
     if (debounceButton(reflowster.pinConfiguration_encoderButton)) {
@@ -551,18 +551,16 @@ void doReflow() {
   activeMode = MODE_REFLOW;
   int status = reflowImpl(soakTemp,soakTime,peakTemp);
 	if (status == 0) {  
-    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
   } else if (status == -1) {
-    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("cancelled");
     tone_error();
   } else if (status == -2) {
-    reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("too hot");
     tone_error();
   }
+	reflowster.setStatusColor(0,0,0);
   while(!reflowster.getDisplay()->marqueeComplete());
 }
 
@@ -708,7 +706,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   byte pulseColors = 0;
   int pulse = 0;
   while(1) {
-    reflowster.pulseTick();
+    //reflowster.pulseTick();
     delay(50);
     double temp = reflowster.readCelsius();
 		double internaltempC = reflowster.readInternalC();
