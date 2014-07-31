@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=1;
+const int REVISION=2;
 
 /*
 go
@@ -48,7 +48,7 @@ int activeCommand = 0;
 const int CMD_REFLOW_START=1;
 const int CMD_REFLOW_STOP=2;
 
-// This represents the current state that the reflowster is in, it is used by the command processing framework
+// This represents the current state that the Reflowster is in, it is used by the command processing framework
 // It should be considered read only in most cases
 int activeMode = 0;
 const int MODE_REFLOW=1;
@@ -109,9 +109,9 @@ void factoryReset() {
   writeConfig(CONFIG_SELF_TEST,255);
   active = profile(130,90,225); //leaded
   saveProfile(0);
+  saveProfile(2); //can we use #defines to spell out which profile is which?
   active = profile(140,90,235); //unleaded
   saveProfile(1);
-  saveProfile(2);
   ewrite(0,0); //default active profile
 }
 
@@ -120,7 +120,7 @@ ISR(TIMER1_OVF_vect) {
   TCNT1 = 65518;
   
   if (millis() - lastService > 1) {
-    reflowster.tick();
+    reflowster.tick(); //this updates the display
     lastService = millis();
   }
   processCommands();
@@ -243,7 +243,10 @@ void processCommands() {
         Serial.println("Status: menus");
       } else if (activeMode == MODE_REFLOW) {
         Serial.println("Status: reflow in progress");        
-      }
+      } else {
+			  Serial.print("Status: ");
+				Serial.println(activeMode);
+			}
 			Serial.print("Firmware version: ");
 			Serial.println(REVISION);
 			double tempC = reflowster.readCelsius();
@@ -265,6 +268,11 @@ void processCommands() {
       } else {
         Serial.println("Mode: Celsius");        
       }
+			if (reflowster.relayStatus()) {
+				Serial.println("Relay: ON");
+			} else {
+			  Serial.println("Relay: OFF");
+			}
       Serial.print("Configuration: ");
       Serial.println(profileNames[activeProfile]);
       Serial.print("Soak Temperature (C): ");
@@ -447,6 +455,9 @@ void mainMenu() {
       activeCommand = 0;
       doReflow();
     }
+		if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
+      reflowster.relayOff();
+    }
     int choice = displayMenu(mainMenuItems,MAIN_MENU_SIZE,lastChoice);
     if (choice != -1) lastChoice = choice;
     switch(choice) {
@@ -533,13 +544,18 @@ void doReflow() {
   byte peakTemp = active.peakTemp;
 
   activeMode = MODE_REFLOW;
-  if (reflowImpl(soakTemp,soakTime,peakTemp) == 0) {  
+  int status = reflowImpl(soakTemp,soakTime,peakTemp);
+	if (status == 0) {  
     reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
-  } else {
+  } else if (status == -1) {
     reflowster.setStatusColor(0,0,0);
     reflowster.getDisplay()->displayMarquee("cancelled");
+    tone_error();
+  } else if (status == -2) {
+    reflowster.setStatusColor(0,0,0);
+    reflowster.getDisplay()->displayMarquee("too hot");
     tone_error();
   }
   while(!reflowster.getDisplay()->marqueeComplete());
@@ -671,7 +687,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   unsigned long buttonStartTime = 0;
   unsigned long lastReport = millis();
   int phase = PHASE_PRE_SOAK;
-  unsigned long MAXIMUM_OVEN_PHASE_TIME = 8*60; //if the oven is on for 8 minutes and we havent hit the desired tempp
+  unsigned long MAXIMUM_OVEN_PHASE_TIME = 8*60; //if the oven is on for 8 minutes and we haven't hit the desired temp
 
   Serial.println("Starting Reflow: ");
   Serial.print("Soak Temp: ");
@@ -681,7 +697,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   Serial.print("Peak Temp: ");
   Serial.println(peakTemp);
   
-  int REPORT_INTERVAL = 200;
+  int REPORT_INTERVAL = 200; //ms
   
   reflowster.relayOn();
   byte pulseColors = 0;
@@ -690,9 +706,10 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
     reflowster.pulseTick();
     delay(50);
     double temp = reflowster.readCelsius();
+		double internaltempC = reflowster.readInternalC();
     unsigned long currentPhaseSeconds = (millis() - phaseStartTime) / 1000;
     
-    if ((millis() - lastReport) > REPORT_INTERVAL) {  //generate a 1000ms event period
+    if ((millis() - lastReport) > REPORT_INTERVAL) {  //generate an event period
       Serial.print("data: ");
       Serial.print(temp);
       Serial.print(" ");
@@ -705,6 +722,14 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
         activeCommand = 0;
         reflowster.relayOff();
         return -1;
+    }
+		if (internaltempC > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection will end reflow process
+        Serial.print("Error: Internal Overtemp; Too Hot ");
+		    Serial.print(internaltempC);
+		    Serial.println("C");
+        activeCommand = 0;
+        reflowster.relayOff();
+        return -2;
     }
     if (buttonStartTime == 0) {
       reflowster.getDisplay()->display((int)celsiusToFahrenheitIfNecessary(temp));
