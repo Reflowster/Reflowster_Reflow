@@ -106,7 +106,7 @@ void setup() {
 }
 
 void factoryReset() {
-  writeConfig(CONFIG_SELF_TEST,255);
+  writeConfig(CONFIG_SELF_TEST,255); //this causes the self-test to run next time you cycle power
   active = profile(130,90,225); //leaded
   saveProfile(0);
   saveProfile(2); //can we use #defines to spell out which profile is which?
@@ -356,15 +356,15 @@ int displayMenu(char * options[], int len, int defaultChoice) {
     
     if (newIndex >= len) {
       newIndex = len - 1;
-      Serial.print("setting knob: ");
-      Serial.println(newIndex);
+      //Serial.print("setting knob: ");
+      //Serial.println(newIndex);
       reflowster.setKnobPosition(newIndex);
     }
     
     if (newIndex < 0) {
       newIndex = 0;
-      Serial.print("setting knob: ");
-      Serial.println(newIndex);
+      //Serial.print("setting knob: ");
+      //Serial.println(newIndex);
       reflowster.setKnobPosition(newIndex);
     }
     
@@ -451,8 +451,8 @@ void loop() {
   mainMenu();
 }
 
-char * mainMenuItems[] = {"go","edit","open","monitor","config"};
-const int MAIN_MENU_SIZE = 5;
+char * mainMenuItems[] = {"go","edit","open","monitor","hold temp","config"};
+const int MAIN_MENU_SIZE = 6;
 void mainMenu() {
   byte lastChoice = 0;
   while(1) {
@@ -478,7 +478,10 @@ void mainMenu() {
 
       case 3: doMonitor(); break;
       
-      case 4: configMenu(); break;
+      case 4: thermostat(); break;
+			
+			case 5: configMenu(); break;
+			
     }
   }
 }
@@ -664,6 +667,43 @@ void configMenu() {
       break;
     }
   }  
+}
+
+void thermostat() {
+  unsigned long lastReport = millis();
+  int UPDATE_PERIOD = 500;
+	int setpoint = chooseNum(0,255,celsiusToFahrenheitIfNecessary(45));
+	int hyst = 1; //degrees
+  while(1) {
+    double temp;
+    if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
+      temp = reflowster.readFahrenheit();
+    } else {
+      temp = reflowster.readCelsius();
+    }
+    reflowster.getDisplay()->display((int)temp);
+
+    if ((millis() - lastReport) > UPDATE_PERIOD) {  //generate an event period (ms)
+      Serial.println(temp);
+      lastReport += UPDATE_PERIOD;
+			if ((temp < setpoint - hyst)&(not reflowster.relayStatus())) {
+				reflowster.relayOn();
+				reflowster.setStatusColor(35,10,0);
+			} 
+			if ((temp > setpoint + hyst)&(reflowster.relayStatus())) {
+				reflowster.relayOff();
+				reflowster.setStatusColor(0,0,5);
+			}
+    }
+    
+    if (debounceButton(reflowster.pinConfiguration_encoderButton)|debounceButton(reflowster.pinConfiguration_backButton)) {
+			reflowster.relayOff();
+			reflowster.setStatusColor(0,0,0);
+			return;
+		}
+		
+    delay(50);
+  } 
 }
 
 double ctof(double c) {
