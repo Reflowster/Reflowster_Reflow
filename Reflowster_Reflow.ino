@@ -672,8 +672,9 @@ void configMenu() {
 void thermostat() {
   unsigned long lastReport = millis();
   int UPDATE_PERIOD = 500;
-	int setpoint = chooseNum(0,255,celsiusToFahrenheitIfNecessary(45));
+	int setpoint = chooseNum(0,celsiusToFahrenheitIfNecessary(375),celsiusToFahrenheitIfNecessary(100));
 	int hyst = 1; //degrees
+	reflowster.setStatusColor(0,0,5);
   while(1) {
     double temp;
     if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
