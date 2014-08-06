@@ -10,19 +10,6 @@
 
 const int REVISION=2;
 
-/*
-go
-set profile
-	pb
-	pb free
-	custom
-		soak temp
-		soak duration
-		peak temperature
-		save
-monitor
-*/
-
 Reflowster reflowster;
 
 struct profile {
@@ -57,6 +44,7 @@ const int MODE_MENU=2;
 const int CONFIG_LOCATION = 200;
 const int CONFIG_SELF_TEST = 0;
 const int CONFIG_TEMP_MODE = 1;
+const int CONFIG_ADVANCED_MODE = 2;
 
 const int TEMP_MODE_C = 0;
 const int TEMP_MODE_F = 1;
@@ -95,31 +83,30 @@ void setup() {
   }
 
   reflowster.displayTest();
-	reflowster.getDisplay()->display(REVISION);
+  reflowster.getDisplay()->display(REVISION);
   delay(500);
-//  noInterrupts();
-//  while(1) {
-//    activeMode = MODE_MENU;
-//    processCommands();
-//  }
   initProfile();
 }
 
 void factoryReset() {
-  writeConfig(CONFIG_SELF_TEST,255); //this causes the self-test to run next time you cycle power
   active = profile(130,90,225); //leaded
   saveProfile(0);
   saveProfile(2); //can we use #defines to spell out which profile is which?
   active = profile(140,90,235); //unleaded
   saveProfile(1);
+
   ewrite(0,0); //default active profile
+
+  writeConfig(CONFIG_SELF_TEST,255); //this causes the self-test to run next time you cycle power
+  writeConfig(CONFIG_TEMP_MODE,DEFAULT_TEMP_MODE); //default to celsius
+  writeConfig(CONFIG_ADVANCED_MODE,0); //default to disabled
 }
 
 unsigned long lastService = millis();
 ISR(TIMER1_OVF_vect) {
   //TCNT1 = 65518;
   TCNT1 = 65200;
-	
+  
   //if (millis() - lastService > 1) {
     reflowster.tick(); //this updates the display
     lastService = millis();
@@ -245,23 +232,23 @@ void processCommands() {
       } else if (activeMode == MODE_REFLOW) {
         Serial.println("Status: reflow in progress");        
       } else {
-			  Serial.print("Status: ");
-				Serial.println(activeMode);
-			}
-			Serial.print("Firmware version: ");
-			Serial.println(REVISION);
-			double tempC = reflowster.readCelsius();
-	  Serial.print("Current thermocouple reading: ");
+        Serial.print("Status: ");
+        Serial.println(activeMode);
+      }
+      Serial.print("Firmware version: ");
+      Serial.println(REVISION);
+      double tempC = reflowster.readCelsius();
+    Serial.print("Current thermocouple reading: ");
       Serial.print(tempC);
-			Serial.print("C ");
-			Serial.print(ctof(tempC));
-			Serial.println("F");
-			tempC = reflowster.readInternalC();
+      Serial.print("C ");
+      Serial.print(ctof(tempC));
+      Serial.println("F");
+      tempC = reflowster.readInternalC();
       Serial.print("Internal junction temperature: ");
       Serial.print(tempC);
-			Serial.print("C ");
-			Serial.print(ctof(tempC));
-			Serial.println("F");
+      Serial.print("C ");
+      Serial.print(ctof(tempC));
+      Serial.println("F");
       
 
       if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
@@ -269,11 +256,11 @@ void processCommands() {
       } else {
         Serial.println("Mode: Celsius");        
       }
-			if (reflowster.relayStatus()) {
-				Serial.println("Relay: ON");
-			} else {
-			  Serial.println("Relay: OFF");
-			}
+      if (reflowster.relayStatus()) {
+        Serial.println("Relay: ON");
+      } else {
+        Serial.println("Relay: OFF");
+      }
       Serial.print("Configuration: ");
       Serial.println(profileNames[activeProfile]);
       Serial.print("Soak Temperature (C): ");
@@ -320,9 +307,9 @@ void tone_success() {
   reflowster.beep(tones[50],100);
   delay(100);
   reflowster.beep(tones[76],60);
-	delay(100);
+  delay(100);
   reflowster.beep(tones[76],60);
-	//  delay(100);
+  //  delay(100);
 }
 
 void tone_blip() {
@@ -460,7 +447,7 @@ void mainMenu() {
       activeCommand = 0;
       doReflow();
     }
-		if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
+    if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
       reflowster.relayOff();
     }
     int choice = displayMenu(mainMenuItems,MAIN_MENU_SIZE,lastChoice);
@@ -479,9 +466,9 @@ void mainMenu() {
       case 3: doMonitor(); break;
       
       case 4: thermostat(); break;
-			
-			case 5: configMenu(); break;
-			
+      
+      case 5: configMenu(); break;
+      
     }
   }
 }
@@ -553,7 +540,7 @@ void doReflow() {
 
   activeMode = MODE_REFLOW;
   int status = reflowImpl(soakTemp,soakTime,peakTemp);
-	if (status == 0) {  
+  if (status == 0) {  
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
   } else if (status == -1) {
@@ -563,7 +550,7 @@ void doReflow() {
     reflowster.getDisplay()->displayMarquee("too hot");
     tone_error();
   }
-	reflowster.setStatusColor(0,0,0);
+  reflowster.setStatusColor(0,0,0);
   while(!reflowster.getDisplay()->marqueeComplete());
 }
 
@@ -641,28 +628,41 @@ void doMonitor() {
   } 
 }
 
-char * configMenuItems[] = {"temp mode","factory reset"};
-const int CONFIG_MENU_ITEMS = 2;
+char * configMenuItems[] = {"temp mode","adv features","factory reset"};
+const int CONFIG_MENU_ITEMS = 3;
 
 char * tempModeMenu[] = {"Cel","Fah"};
 const int TEMP_MODE_ITEMS = 2;
+
+char * advFeatMenu[] = {"no","yes"};
+const int ADV_FEAT_ITEMS = 2;
+
 void configMenu() {
   int choice = 0;
+  int subChoice = 0;
   while(1) {
     choice = displayMenu(configMenuItems,CONFIG_MENU_ITEMS,choice);
     switch(choice) {
       case -1: return;
       case 0: {
-        int tempChoice = readConfig(CONFIG_TEMP_MODE);
-        if (tempChoice == 255) tempChoice = DEFAULT_TEMP_MODE;
-        tempChoice = displayMenu(tempModeMenu,TEMP_MODE_ITEMS,tempChoice);
-        if (tempChoice != -1 && tempChoice != readConfig(CONFIG_TEMP_MODE)) {
-          writeConfig(CONFIG_TEMP_MODE,tempChoice);
+        subChoice = readConfig(CONFIG_TEMP_MODE);
+        subChoice = displayMenu(tempModeMenu,TEMP_MODE_ITEMS,subChoice);
+        if (subChoice != -1 && subChoice != readConfig(CONFIG_TEMP_MODE)) {
+          writeConfig(CONFIG_TEMP_MODE,subChoice);
         }
       }
       break;
 
-      case 1:
+      case 1: {
+        subChoice = readConfig(CONFIG_ADVANCED_MODE);
+        subChoice = displayMenu(advFeatMenu,ADV_FEAT_ITEMS,subChoice);
+        if (subChoice != -1 && subChoice != readConfig(CONFIG_ADVANCED_MODE)) {
+          writeConfig(CONFIG_ADVANCED_MODE,subChoice);
+        }
+      }
+      break;
+
+      case 2:
         factoryReset();
       break;
     }
@@ -672,9 +672,9 @@ void configMenu() {
 void thermostat() {
   unsigned long lastReport = millis();
   int UPDATE_PERIOD = 500;
-	int setpoint = chooseNum(0,celsiusToFahrenheitIfNecessary(375),celsiusToFahrenheitIfNecessary(100));
-	int hyst = 1; //degrees
-	reflowster.setStatusColor(0,0,5);
+  int setpoint = chooseNum(0,celsiusToFahrenheitIfNecessary(375),celsiusToFahrenheitIfNecessary(100));
+  int hyst = 1; //degrees
+  reflowster.setStatusColor(0,0,5);
   while(1) {
     double temp;
     if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
@@ -687,22 +687,22 @@ void thermostat() {
     if ((millis() - lastReport) > UPDATE_PERIOD) {  //generate an event period (ms)
       Serial.println(temp);
       lastReport += UPDATE_PERIOD;
-			if ((temp < setpoint - hyst)&(not reflowster.relayStatus())) {
-				reflowster.relayOn();
-				reflowster.setStatusColor(35,10,0);
-			} 
-			if ((temp > setpoint + hyst)&(reflowster.relayStatus())) {
-				reflowster.relayOff();
-				reflowster.setStatusColor(0,0,5);
-			}
+      if ((temp < setpoint - hyst)&(not reflowster.relayStatus())) {
+        reflowster.relayOn();
+        reflowster.setStatusColor(35,10,0);
+      } 
+      if ((temp > setpoint + hyst)&(reflowster.relayStatus())) {
+        reflowster.relayOff();
+        reflowster.setStatusColor(0,0,5);
+      }
     }
     
     if (debounceButton(reflowster.pinConfiguration_encoderButton)|debounceButton(reflowster.pinConfiguration_backButton)) {
-			reflowster.relayOff();
-			reflowster.setStatusColor(0,0,0);
-			return;
-		}
-		
+      reflowster.relayOff();
+      reflowster.setStatusColor(0,0,0);
+      return;
+    }
+    
     delay(50);
   } 
 }
@@ -750,7 +750,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
     //reflowster.pulseTick();
     delay(50);
     double temp = reflowster.readCelsius();
-		double internaltempC = reflowster.readInternalC();
+    double internaltempC = reflowster.readInternalC();
     unsigned long currentPhaseSeconds = (millis() - phaseStartTime) / 1000;
     
     if ((millis() - lastReport) > REPORT_INTERVAL) {  //generate an event period
@@ -767,10 +767,10 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
         reflowster.relayOff();
         return -1;
     }
-		if (internaltempC > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection will end reflow process
+    if (internaltempC > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection will end reflow process
         Serial.print("Error: Internal Overtemp; Too Hot ");
-		    Serial.print(internaltempC);
-		    Serial.println("C");
+        Serial.print(internaltempC);
+        Serial.println("C");
         activeCommand = 0;
         reflowster.relayOff();
         return -2;
@@ -819,7 +819,7 @@ byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
           phase = PHASE_COOL;
           phaseStartTime = millis();
           reflowster.relayOff();
-					
+          
         }
         break;
       }
