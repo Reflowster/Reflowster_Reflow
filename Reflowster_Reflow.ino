@@ -665,7 +665,23 @@ void configMenu() {
       break;
 
       case 2:
-        factoryReset();
+        reflowster.getDisplay()->displayMarquee("are you sure");
+        delay(300);
+        boolean cancel = true;
+        while(1) {
+          if (debounceButton(reflowster.pinConfiguration_encoderButton)) {
+            cancel = false;
+            break;
+          }
+          if (debounceButton(reflowster.pinConfiguration_backButton)) {
+            cancel = true;
+            break;
+          }
+        }
+        if (!cancel) {
+          factoryReset();
+          return;
+        }
       break;
     }
   }  
