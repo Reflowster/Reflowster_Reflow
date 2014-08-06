@@ -440,6 +440,7 @@ void loop() {
 
 char * mainMenuItems[] = {"go","edit","open","monitor","hold temp","config"};
 const int MAIN_MENU_SIZE = 6;
+
 void mainMenu() {
   byte lastChoice = 0;
   while(1) {
@@ -447,10 +448,12 @@ void mainMenu() {
       activeCommand = 0;
       doReflow();
     }
+    //TODO discuss this and probably move it somewhere else
     if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
       reflowster.relayOff();
     }
-    int choice = displayMenu(mainMenuItems,MAIN_MENU_SIZE,lastChoice);
+    int menuSize = (readConfig(CONFIG_ADVANCED_MODE) ? MAIN_MENU_SIZE : MAIN_MENU_SIZE - 1); //allow for disabling advanced features
+    int choice = displayMenu(mainMenuItems,menuSize,lastChoice);
     if (choice != -1) lastChoice = choice;
     switch(choice) {
       case 0: doReflow(); break;
@@ -465,10 +468,9 @@ void mainMenu() {
 
       case 3: doMonitor(); break;
       
-      case 4: thermostat(); break;
-      
-      case 5: configMenu(); break;
-      
+      case 4: configMenu(); break;
+
+      case 5: thermostat(); break;
     }
   }
 }
