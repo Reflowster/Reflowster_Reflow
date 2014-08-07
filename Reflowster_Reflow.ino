@@ -542,6 +542,7 @@ void doReflow() {
 
   activeMode = MODE_REFLOW;
   int status = reflowImpl(soakTemp,soakTime,peakTemp);
+  Serial.println(status);
   if (status == 0) {  
     reflowster.getDisplay()->displayMarquee("done");
     tone_success();
@@ -743,7 +744,7 @@ double celsiusToFahrenheitIfNecessary(double c) {
 #define PHASE_SPIKE 2
 #define PHASE_COOL 3
 #define CANCEL_TIME 5000
-byte reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
+int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   unsigned long startTime = millis();
   unsigned long phaseStartTime = millis();
   unsigned long buttonStartTime = 0;
