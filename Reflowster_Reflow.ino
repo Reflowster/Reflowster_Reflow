@@ -438,7 +438,7 @@ void loop() {
   mainMenu();
 }
 
-char * mainMenuItems[] = {"go","edit","open","monitor","hold temp","config"};
+char * mainMenuItems[] = {"go","edit","open","monitor","config","hold temp"};
 const int MAIN_MENU_SIZE = 6;
 
 void mainMenu() {
