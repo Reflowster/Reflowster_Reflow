@@ -123,6 +123,8 @@ byte debounceButton(int b) {
   return 0;
 }
 
+const char * setCommands[] = {"setst","setsd","setpt"};
+const char * setNames[] = {"soak temperature","soak duration","peak temperature"};
 void processCommands() {
   char buffer[30];
   boolean recognized = false;
@@ -152,7 +154,6 @@ void processCommands() {
           reflowster.relayToggle();
         }
       } else if (command.startsWith("set ")) {
-        //TODO dedup this code by taking advantage of the indexing in a soldering profile struct
         recognized = true;
         int val = arguments.toInt();
         if (val < 0 || val > PROFILE_COUNT-1) {
@@ -162,61 +163,27 @@ void processCommands() {
           Serial.print("Set active profile: ");
           Serial.println(profileNames[activeProfile]);
         }
-      } else if (command.startsWith("setst ")) {
-        //TODO dedup this code by taking advantage of the indexing in a soldering profile struct
-        recognized = true;
+      } else if (command.startsWith("set")) {
+        int l;
         int val = arguments.toInt();
-        if (val < profile_min.soakTemp || val > profile_max.soakTemp) {
-          Serial.println("Temperature out of range!");
-        } else {
-          active.soakTemp = (byte)val;
-          saveProfile(activeProfile);
-          Serial.print("Set soak temperature: ");
-          Serial.println(active.soakTemp);
-        }
-      } else if (command.startsWith("setsd ")) {
-        recognized = true;
-        int val = arguments.toInt();
-        if (val < profile_min.soakTime || val > profile_max.soakTime) {
-          Serial.println("Time out of range!");
-        } else {
-          active.soakTime = (byte)val;
-          saveProfile(activeProfile);
-          Serial.print("Set soak time: ");
-          Serial.println(active.soakTime);
-        }
-      } else if (command.startsWith("setpt ")) {
-        recognized = true;
-        int val = arguments.toInt();
-        if (val < profile_min.peakTemp || val > profile_max.peakTemp) {
-          Serial.println("Temperature out of range!");
-        } else {
-          active.peakTemp = (byte)val;
-          saveProfile(activeProfile);
-          Serial.print("Set peak temp: ");
-          Serial.println(active.peakTemp);
+        for (l=0; l<3; l++) {
+          if (command.startsWith(setCommands[l])) {
+            recognized = true;
+            if (val < ((byte *)&profile_min)[l] || val > ((byte *)&profile_max)[l]) {
+              Serial.println("Value out of range!");
+            } else {
+              ((byte *)&active)[l] = (byte)val;
+              saveProfile(activeProfile);
+              Serial.print("Set ");
+              Serial.print(setNames[l]);
+              Serial.print(": ");
+              Serial.println(val);
+            }
+          }
         }
       } else if (command.equalsIgnoreCase("start")) {
         recognized = true;
         activeCommand = CMD_REFLOW_START;
-//      } else if (command.startsWith("tone ")) {
-//        recognized = true;
-//        arguments.trim();
-//        arguments.toCharArray(buffer,arguments.length()+1);
-//        char * tok = strtok(buffer, " ,");
-//        i = 0;
-//        while(tok != NULL) {
-//          int key = atoi(tok);
-//          tok = strtok(NULL, " ,");
-//          int len = atoi(tok);
-//          tok = strtok(NULL, " ,");
-//          if (key != 0) reflowster.beep(tones[key],len);
-//          delay(len);
-//          Serial.print("tone: ");
-//          Serial.print(key);
-//          Serial.print(" ");
-//          Serial.println(len);
-//        }
       }
     } else if (activeMode == MODE_REFLOW) {
       if (command.equalsIgnoreCase("stop")) {
