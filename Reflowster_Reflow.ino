@@ -512,7 +512,6 @@ void doReflow() {
   Serial.println(status);
   if (status == 0) {  
     reflowster.getDisplay()->displayMarquee("done");
-    tone_success();
   } else if (status == -1) {
     reflowster.getDisplay()->displayMarquee("cancelled");
     tone_error();
