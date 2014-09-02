@@ -26,7 +26,7 @@ profile profile_max(250,250,250);
 profile active;
 byte activeProfile;
 
-char * profileNames[] = {"+pb leaded","-pb unleaded","custom"};
+char * profileNames[] = {"pb leaded","-pb unleaded","custom"};
 const int PROFILE_COUNT = 3;
 
 int activeCommand = 0;
@@ -74,7 +74,6 @@ void setup() {
     while(1) {
       if (reflowster.getButton()) {
         factoryReset();
-        writeConfig(CONFIG_SELF_TEST,0);
         break;
       }
       
@@ -97,7 +96,8 @@ void factoryReset() {
 
   ewrite(0,0); //default active profile
 
-  writeConfig(CONFIG_SELF_TEST,255); //this causes the self-test to run next time you cycle power
+  writeConfig(CONFIG_SELF_TEST,0);
+  //writeConfig(CONFIG_SELF_TEST,255); //this causes the self-test to run next time you cycle power
   writeConfig(CONFIG_TEMP_MODE,DEFAULT_TEMP_MODE); //default to celsius
   writeConfig(CONFIG_ADVANCED_MODE,0); //default to disabled
 }
@@ -556,15 +556,11 @@ boolean editProfile() {
       case 1:
       case 2:
         stored = *(((byte*)&active)+choice);
-        //Serial.print("stored val: ");
-        //Serial.println(stored);
         if (choice == 0 || choice == 2) { //temp choices
           val = chooseTemp(stored);
         } else {
           val = chooseNum(0,255,stored);
         }
-        //Serial.print("new stored: ");
-        //Serial.println(val);
         *(((byte*)&active)+choice) = val;
 
         saveProfile(activeProfile);
@@ -805,7 +801,6 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
           phase = PHASE_COOL;
           phaseStartTime = millis();
           reflowster.relayOff();
-          
         }
         break;
       }
