@@ -572,7 +572,7 @@ boolean editProfile() {
 void doMonitor() {
   unsigned long lastReport = millis();
   int MONITOR_FREQUENCY = 1000;
-  while(1) {
+  while(e) {
     
     double temp;
     if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
@@ -801,6 +801,7 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
           phase = PHASE_COOL;
           phaseStartTime = millis();
           reflowster.relayOff();
+          tone_success();
         }
         break;
       }
