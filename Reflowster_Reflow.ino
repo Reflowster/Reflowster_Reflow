@@ -114,6 +114,23 @@ ISR(TIMER1_OVF_vect) {
   processCommands();
 }
 
+unsigned long REPORT_INTERVAL = 1000; //ms
+unsigned long lastReport = 0;
+void doReport() {
+    if ((millis() - lastReport) > REPORT_INTERVAL) {  //generate an event period
+      double temp = 0;
+      if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
+        temp = reflowster.readFahrenheit();
+      } else {
+        temp = reflowster.readCelsius();
+      }
+      Serial.print(temp);
+      Serial.print(" ");
+      Serial.println(reflowster.relayStatus());
+      lastReport += REPORT_INTERVAL;
+    }
+}
+
 byte debounceButton(int b) {
   if (!digitalRead(b)) {
     while(!digitalRead(b));
@@ -289,7 +306,7 @@ int displayMenu(char * options[], int len, int defaultChoice) {
   int menuIndex = -1;
   reflowster.setKnobPosition(defaultChoice);
   while(1) {
-    //reflowster.pulseTick();
+    tick();
     
     if (activeCommand != 0) return -1;
     if (debounceButton(reflowster.pinConfiguration_encoderButton)) {
@@ -408,16 +425,18 @@ void loop() {
 char * mainMenuItems[] = {"go","edit","open","monitor","config","hold temp"};
 const int MAIN_MENU_SIZE = 6;
 
+void tick() {
+    if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
+      reflowster.relayOff();
+    }
+}
+
 void mainMenu() {
   byte lastChoice = 0;
   while(1) {
     if (activeCommand == CMD_REFLOW_START) {
       activeCommand = 0;
       doReflow();
-    }
-    //TODO discuss this and probably move it somewhere else
-    if (reflowster.readInternalC() > reflowster.MAX_ALLOWABLE_INTERNAL) { //overheat protection
-      reflowster.relayOff();
     }
     int menuSize = (readConfig(CONFIG_ADVANCED_MODE) ? MAIN_MENU_SIZE : MAIN_MENU_SIZE - 1); //allow for disabling advanced features
     int choice = displayMenu(mainMenuItems,menuSize,lastChoice);
@@ -439,59 +458,6 @@ void mainMenu() {
 
       case 5: thermostat(); break;
     }
-  }
-}
-
-void dataCollectionMode() {
-  double goalTemp = 80;
-  unsigned long lastReport = millis();
-  
-  unsigned long lastCycleStart = millis();
-  float ratio = .1;
-  int timeUnit = 30000;
-  
-  long REPORT_FREQUENCY = 5000;
-  while(1) {
-    double temp = 0;
-    if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
-      temp = reflowster.readFahrenheit();
-    } else {
-      temp = reflowster.readCelsius();
-    }
-    if ((millis() - lastReport) > REPORT_FREQUENCY) {
-      Serial.print("data: ");
-      Serial.print(temp);
-      Serial.print(" ");
-      Serial.println(reflowster.relayStatus());
-      lastReport += REPORT_FREQUENCY;
-    }
-    
-    long current = millis();
-    long cycleDuration = current - lastCycleStart;
-    if (current > lastCycleStart+timeUnit) {
-      lastCycleStart += timeUnit;
-      cycleDuration = 0;
-    } 
-    double cratio = (double)cycleDuration/(double)timeUnit;
-    boolean on = cratio < ratio;
-    if (temp < 88) on = true;
-//    Serial.print("cycleDuration: ");
-//    Serial.println(cycleDuration);
-//    Serial.print("cratio: ");
-//    Serial.println(cratio);
-    if (reflowster.relayStatus() && !on) {
-      reflowster.relayOff();
-    } else if (!reflowster.relayStatus() && on) {
-      reflowster.relayOn();        
-    }
-    
-    if (reflowster.getBackButton()) {
-       while(reflowster.getBackButton());
-       delay(1000);
-       return; 
-    }
-    
-    delay(300);
   }
 }
 
@@ -569,10 +535,7 @@ boolean editProfile() {
 }
 
 void doMonitor() {
-  unsigned long lastReport = millis();
-  int MONITOR_FREQUENCY = 1000;
-  while(e) {
-    
+  while(1) {
     double temp;
     if (readConfig(CONFIG_TEMP_MODE) == TEMP_MODE_F) {
       temp = reflowster.readFahrenheit();
@@ -581,10 +544,7 @@ void doMonitor() {
     }
     reflowster.getDisplay()->display((int)temp);
 
-    if ((millis() - lastReport) > MONITOR_FREQUENCY) {  //generate a 1000ms event period
-      Serial.println(temp);
-      lastReport += MONITOR_FREQUENCY;
-    }
+    doReport();
     
     if (debounceButton(reflowster.pinConfiguration_encoderButton)) return;
     if (debounceButton(reflowster.pinConfiguration_backButton)) return;
@@ -651,7 +611,7 @@ void configMenu() {
 }
 
 void thermostat() {
-  unsigned long lastReport = millis();
+  unsigned long lastUpdate = millis();
   int UPDATE_PERIOD = 500;
   int setpoint = chooseNum(0,celsiusToFahrenheitIfNecessary(375),celsiusToFahrenheitIfNecessary(100));
   int hyst = 1; //degrees
@@ -665,9 +625,9 @@ void thermostat() {
     }
     reflowster.getDisplay()->display((int)temp);
 
-    if ((millis() - lastReport) > UPDATE_PERIOD) {  //generate an event period (ms)
+    if ((millis() - lastUpdate) > UPDATE_PERIOD) {  //generate an event period (ms)
       Serial.println(temp);
-      lastReport += UPDATE_PERIOD;
+      lastUpdate += UPDATE_PERIOD;
       if ((temp < setpoint - hyst)&(not reflowster.relayStatus())) {
         reflowster.relayOn();
         reflowster.setStatusColor(35,10,0);
@@ -701,6 +661,7 @@ double celsiusToFahrenheitIfNecessary(double c) {
   return ctof(c);
 }
 
+
 #define PHASE_PRE_SOAK 0
 #define PHASE_SOAK 1
 #define PHASE_SPIKE 2
@@ -710,7 +671,6 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   unsigned long startTime = millis();
   unsigned long phaseStartTime = millis();
   unsigned long buttonStartTime = 0;
-  unsigned long lastReport = millis();
   int phase = PHASE_PRE_SOAK;
   unsigned long MAXIMUM_OVEN_PHASE_TIME = 8*60; //if the oven is on for 8 minutes and we haven't hit the desired temp
 
@@ -722,8 +682,6 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   Serial.print("Peak Temp: ");
   Serial.println(peakTemp);
   
-  int REPORT_INTERVAL = 200; //ms
-  
   reflowster.relayOn();
   byte pulseColors = 0;
   int pulse = 0;
@@ -734,13 +692,7 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
     double internaltempC = reflowster.readInternalC();
     unsigned long currentPhaseSeconds = (millis() - phaseStartTime) / 1000;
     
-    if ((millis() - lastReport) > REPORT_INTERVAL) {  //generate an event period
-      Serial.print("data: ");
-      Serial.print(temp);
-      Serial.print(" ");
-      Serial.println(reflowster.relayStatus());
-      lastReport += REPORT_INTERVAL;
-    }
+    doReport();
     
     if (activeCommand == CMD_REFLOW_STOP) {
         Serial.println("Reflow cancelled");
