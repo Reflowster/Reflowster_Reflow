@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=4;
+const int REVISION=5;
 
 Reflowster reflowster;
 
