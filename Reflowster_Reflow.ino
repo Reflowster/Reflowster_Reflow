@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=5;
+const int REVISION=6;
 
 Reflowster reflowster;
 
@@ -142,15 +142,31 @@ byte debounceButton(int b) {
 
 const char * setCommands[] = {"setst","setsd","setpt"};
 const char * setNames[] = {"soak temperature","soak duration","peak temperature"};
+char buffer[30];
+int bindex = 0;
 void processCommands() {
-  char buffer[30];
   boolean recognized = false;
-  char i = 0;
-  while (Serial.available()) {
-    buffer[i++] = Serial.read();
+  boolean enterFound = false;
+  while (Serial.available() && !enterFound) {
+    char c = Serial.read();
+    Serial.print(c);
+//    Serial.print(" ");
+//    Serial.println(int(c));
+//    if (c == 127) {
+//      bindex--;
+//      continue;
+//    }
+    if (c != '\r' && c != '\n') buffer[bindex++] = c;
+    if (c == '\r' || c == '\n') {
+      if (bindex > 1) {
+        enterFound = true;
+      }
+    }
   }
-  if (i != 0) {
-    buffer[i] = 0;
+  if (enterFound) {
+    buffer[bindex] = 0;
+    int cmdlength = bindex-1;
+    bindex = 0;
     String command = String(buffer);
     int spaceAt = command.indexOf(" ");
     String arguments = command.substring(spaceAt+1);
@@ -256,6 +272,7 @@ void processCommands() {
       Serial.print("Peak Temperature (C): ");
       Serial.println(active.peakTemp);
     } else if (command.equalsIgnoreCase("help")) {
+      recognized = true;
       Serial.println("Reflowster accepts the following commands in normal mode:");
       Serial.println("relay on|off|toggle, setst deg_c, setsd time_s, setpt deg_c, start, status, help");
       Serial.println();
