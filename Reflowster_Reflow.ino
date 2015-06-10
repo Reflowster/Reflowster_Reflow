@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=6;
+const int REVISION=7;
 
 Reflowster reflowster;
 
@@ -501,6 +501,9 @@ void doReflow() {
   } else if (status == -2) {
     reflowster.getDisplay()->displayMarquee("too hot");
     tone_error();
+  } else if (status == -3) {
+    reflowster.getDisplay()->displayMarquee("missing thermocouple");
+    tone_error();
   }
   reflowster.setStatusColor(0,0,0);
   while(!reflowster.getDisplay()->marqueeComplete());
@@ -702,10 +705,16 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
   reflowster.relayOn();
   byte pulseColors = 0;
   int pulse = 0;
+  int lostThermocouple = 0;
   while(1) {
     //reflowster.pulseTick();
     delay(50);
     double temp = reflowster.readCelsius();
+    if (isnan(temp)) {
+        lostThermocouple ++;
+    } else {
+        lostThermocouple = 0;
+    }
     double internaltempC = reflowster.readInternalC();
     unsigned long currentPhaseSeconds = (millis() - phaseStartTime) / 1000;
     
@@ -724,6 +733,12 @@ int reflowImpl(byte soakTemp, byte soakTime, byte peakTemp) {
         activeCommand = 0;
         reflowster.relayOff();
         return -2;
+    }
+    if (lostThermocouple > 10) {
+        Serial.println("Lost connection with thermocouple, cancelled reflow");
+        activeCommand = 0;
+        reflowster.relayOff();
+        return -3;
     }
     if (buttonStartTime == 0) {
       reflowster.getDisplay()->display((int)celsiusToFahrenheitIfNecessary(temp));
