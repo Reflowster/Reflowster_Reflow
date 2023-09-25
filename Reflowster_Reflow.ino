@@ -8,7 +8,7 @@
 #include <string.h>
 #include <EEPROM.h>
 
-const int REVISION=7;
+const int REVISION=8;
 
 Reflowster reflowster;
 
@@ -285,6 +285,10 @@ void processCommands() {
   }
 }
 
+void tone_bad() {
+  reflowster.beep(tones[28],200);
+}
+
 void tone_error() {
   reflowster.beep(tones[28],200);
   delay(200);
@@ -481,8 +485,11 @@ void mainMenu() {
 void doReflow() {
   if (isnan(reflowster.readCelsius())) {
     reflowster.getDisplay()->displayMarquee("err no temp");
+    tone_error();
     Serial.println("Error: Thermocouple could not be read, check connection!");
-    while(!reflowster.getDisplay()->marqueeComplete());
+    do {
+      delay(20);
+    } while(!reflowster.getDisplay()->marqueeComplete());
     return;
   }
 
@@ -506,7 +513,9 @@ void doReflow() {
     tone_error();
   }
   reflowster.setStatusColor(0,0,0);
-  while(!reflowster.getDisplay()->marqueeComplete());
+  do {
+    delay(20);
+  } while(!reflowster.getDisplay()->marqueeComplete());
 }
 
 boolean openProfile() {
@@ -635,6 +644,7 @@ void thermostat() {
   int UPDATE_PERIOD = 500;
   int setpoint = chooseNum(0,celsiusToFahrenheitIfNecessary(375),celsiusToFahrenheitIfNecessary(100));
   int hyst = 1; //degrees
+  int cycle = 0;
   reflowster.setStatusColor(0,0,5);
   while(1) {
     double temp;
@@ -643,16 +653,34 @@ void thermostat() {
     } else {
       temp = reflowster.readCelsius();
     }
-    reflowster.getDisplay()->display((int)temp);
+
+    if (isnan(temp)) {
+      if (!(cycle % 8)) {
+        reflowster.getDisplay()->displayMarquee("err");
+        tone_bad();
+      }
+      delay(500);
+    } else {
+      reflowster.getDisplay()->display((int)temp);
+    }
 
     if ((millis() - lastUpdate) > UPDATE_PERIOD) {  //generate an event period (ms)
+      cycle++;
       Serial.println(temp);
       lastUpdate += UPDATE_PERIOD;
-      if ((temp < setpoint - hyst)&(not reflowster.relayStatus())) {
+      if (isnan(temp)) {
+        reflowster.relayOff();
+        if (cycle % 2) {
+          reflowster.setStatusColor(100,0,0);
+        } else {
+          reflowster.setStatusColor(0,0,0);
+        }
+      }
+      if ((temp < setpoint - hyst)&&(not reflowster.relayStatus())) {
         reflowster.relayOn();
         reflowster.setStatusColor(35,10,0);
       } 
-      if ((temp > setpoint + hyst)&(reflowster.relayStatus())) {
+      if ((temp > setpoint + hyst)&&(reflowster.relayStatus())) {
         reflowster.relayOff();
         reflowster.setStatusColor(0,0,5);
       }
